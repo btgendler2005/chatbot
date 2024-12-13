@@ -1,77 +1,65 @@
-import tkinter as tk
-from tkinter import scrolledtext
-import anthropic
+import streamlit as st
+from anthropic import Anthropic
 
-class ClaudeChatbot:
-    def __init__(self):
-        self.client = client = anthropic.Anthropic()
-        self.setup_ui()
-        self.conversation_history = []
 
-    def setup_ui(self):
-        self.window = tk.Tk()
-        self.window.title("Claude Chatbot")
-        self.window.geometry("600x400")
+# Initialize Anthropic client
+anthropic = Anthropic(api_key='')  # Replace with your actual API key
 
-        # Chat display area
-        self.chat_area = scrolledtext.ScrolledText(self.window, wrap=tk.WORD, height=20)
-        self.chat_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+# Set up the Streamlit page
+st.title("Season App Chatbot")
 
-        # Input area
-        self.input_frame = tk.Frame(self.window)
-        self.input_frame.pack(padx=10, pady=5, fill=tk.X)
+# Initialize chat history in session state if it doesn't exist
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+    # Set initial message if chat history is empty
+    if len(st.session_state.messages) == 0:
+        initial_message = "Welcome! I'm CLEO, your sports companion. I'd love to understand what brings you to sports. Would you like to share what interests you most right now?"
+        st.session_state.messages.append({"role": "assistant", "content": initial_message})
 
-        self.message_entry = tk.Entry(self.input_frame)
-        self.message_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        self.send_button = tk.Button(self.input_frame, text="Send", command=self.send_message)
-        self.send_button.pack(side=tk.RIGHT, padx=5)
+# Display chat history
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
 
-        # Bind Enter key to send message
-        self.message_entry.bind("<Return>", lambda e: self.send_message())
+# Chat input
+if prompt := st.chat_input("What would you like to ask?"):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Display user message
+    with st.chat_message("user"):
+        st.write(prompt)
 
-    def send_message(self):
-        user_message = self.message_entry.get()
-        if user_message.strip():
-            # Display user message
-            self.chat_area.insert(tk.END, "You: " + user_message + "\n")
-            
-            # Prepare conversation context
-            messages = "\n".join([f"{msg['role']}: {msg['content']}" for msg in self.conversation_history])
-            
-            # Get Claude's response
-            try:
-                response = self.client.messages.create(
-                    model="claude-3-opus-20240229",
-                    max_tokens=1024,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": user_message
-                        }
-                    ]
-                )
-                
-                bot_response = response.content[0].text
-                
-                # Update conversation history
-                self.conversation_history.append({"role": "user", "content": user_message})
-                self.conversation_history.append({"role": "assistant", "content": bot_response})
-                
-                # Display Claude's response
-                self.chat_area.insert(tk.END, "Claude: " + bot_response + "\n\n")
-                self.chat_area.see(tk.END)
-            
-            except Exception as e:
-                self.chat_area.insert(tk.END, "Error: Could not get response from Claude\n\n")
-                print(f"Error: {e}")
+    # Get Claude's response
+    try:
+        # Messages list to include chat history
+        messages = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[:-1]]
+        messages.append({"role": "user", "content": prompt})
+        response = anthropic.messages.create(
+            model="claude-3-5-haiku-20241022",
+            max_tokens=1000,
+            system="""You are CLEO, SEASON's intelligent sports companion designed to make sports accessible and engaging for everyone, with a special focus on creating a welcoming space for women. You understand that sports has historically been gatekept and over-explained to women in condescending ways.
+Core Traits:
+- Non-judgmental and welcoming to all levels of sports interest
+- Patient and permission-seeking before detailed explanations
+- Concise yet thorough in responses
+- Adaptable to each user's interests and comfort level
+- Understanding that sports fandom comes in many forms""",
+            messages=messages
+        )
+        # Add follow-up context gathering question
+        if len(st.session_state.messages) == 2:  # After first user response
+            follow_up = "Thank you for sharing! Would it be helpful if I asked a few quick questions to better personalize our conversation?"
+            response.content[0].text += f"\n\n{follow_up}"
+       
+        # Display assistant message
+        with st.chat_message("assistant"):
+            st.write(response.content[0].text)
 
-            # Clear input field
-            self.message_entry.delete(0, tk.END)
 
-    def run(self):
-        self.window.mainloop()
-
-if __name__ == "__main__":
-    chatbot = ClaudeChatbot()
-    chatbot.run()
+        
+        # Add assistant message to chat history
+        st.session_state.messages.append({"role": "assistant", "content": response.content[0].text})
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
