@@ -1,65 +1,60 @@
 import streamlit as st
-from anthropic import Anthropic
+import openai
 
+# Replace with your OpenAI API key
+openai.api_key = "your_openai_api_key"
 
-# Initialize Anthropic client
-anthropic = Anthropic(api_key='')  # Replace with your actual API key
+def generate_response(prompt):
+    """Sends the user's message to OpenAI API and retrieves the response."""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a gym assistant. Help users build and track workout plans. You have the personality of Jim Halpert from the show The Office. Please make sure to add 'The Office' references and jokes in your responses."},
+                {"role": "user", "content": prompt},
+            ]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error: {e}"
 
-# Set up the Streamlit page
-st.title("Season App Chatbot")
+# Streamlit App
+st.set_page_config(page_title="Gym Assistant", layout="centered")
 
-# Initialize chat history in session state if it doesn't exist
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-    # Set initial message if chat history is empty
-    if len(st.session_state.messages) == 0:
-        initial_message = "Welcome! I'm CLEO, your sports companion. I'd love to understand what brings you to sports. Would you like to share what interests you most right now?"
-        st.session_state.messages.append({"role": "assistant", "content": initial_message})
+st.title("🏋️ Gym Assistant")
+st.markdown(
+    "Welcome to your Gym Assistant! This chatbot helps you build and track your workout plans."
+)
 
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # Display chat history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
+chat_container = st.container()
+for entry in st.session_state.chat_history:
+    role, message = entry
+    if role == "user":
+        chat_container.markdown(f"**You:** {message}")
+    else:
+        chat_container.markdown(f"**Gym Halpert:** {message}")
 
-# Chat input
-if prompt := st.chat_input("What would you like to ask?"):
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # Display user message
-    with st.chat_message("user"):
-        st.write(prompt)
+# User input
+user_input = st.text_input("Type your message:", placeholder="e.g., Plan a workout for chest and back", key="user_input")
 
-    # Get Claude's response
-    try:
-        # Messages list to include chat history
-        messages = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[:-1]]
-        messages.append({"role": "user", "content": prompt})
-        response = anthropic.messages.create(
-            model="claude-3-5-haiku-20241022",
-            max_tokens=1000,
-            system="""You are CLEO, SEASON's intelligent sports companion designed to make sports accessible and engaging for everyone, with a special focus on creating a welcoming space for women. You understand that sports has historically been gatekept and over-explained to women in condescending ways.
-Core Traits:
-- Non-judgmental and welcoming to all levels of sports interest
-- Patient and permission-seeking before detailed explanations
-- Concise yet thorough in responses
-- Adaptable to each user's interests and comfort level
-- Understanding that sports fandom comes in many forms""",
-            messages=messages
-        )
-        # Add follow-up context gathering question
-        if len(st.session_state.messages) == 2:  # After first user response
-            follow_up = "Thank you for sharing! Would it be helpful if I asked a few quick questions to better personalize our conversation?"
-            response.content[0].text += f"\n\n{follow_up}"
-       
-        # Display assistant message
-        with st.chat_message("assistant"):
-            st.write(response.content[0].text)
+if st.button("Send") and user_input.strip():
+    # Add user message to history
+    st.session_state.chat_history.append(("user", user_input))
 
+    # Get response from OpenAI
+    bot_response = generate_response(user_input)
+    st.session_state.chat_history.append(("assistant", bot_response))
 
-        
-        # Add assistant message to chat history
-        st.session_state.messages.append({"role": "assistant", "content": response.content[0].text})
-    except Exception as e:
-        st.error(f"Error: {str(e)}")
+    # Rerun to refresh the chat display
+    user_input = ""
+    st.experimental_update()
+
+# Style
+st.markdown(
+    "<style>\n        div.stTextInput > div > input {\n            border-radius: 8px;\n            padding: 10px;\n            border: 1px solid #ccc;\n            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);\n        }\n        div.stButton > button {\n            padding: 10px 20px;\n            border-radius: 8px;\n            background-color: #007BFF;\n            color: white;\n            border: none;\n            cursor: pointer;\n        }\n        div.stButton > button:hover {\n            background-color: #0056b3;\n        }\n    </style>",
+    unsafe_allow_html=True,
+)
